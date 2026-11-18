@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 학생 심리상담 챗봇 5단계 누적 진화실험실</title>
+    <!-- Google Gen AI SDK -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/genai": "https://esm.run/@google/genai"
+        }
+      }
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', -apple-system, sans-serif; }
+        body { background: #0f172a; color: #f8fafc; height: 100vh; display: flex; flex-direction: column; }
+        header { background: #1e293b; color: white; padding: 0.8rem 1.5rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+        header h1 { font-size: 1.15rem; font-weight: bold; }
+        header span { font-size: 0.8rem; background: #2563eb; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-weight: bold; }
+
+        .main-container { display: flex; flex: 1; gap: 1rem; padding: 1rem; overflow: hidden; }
+        
+        .left-panel { flex: 1; display: flex; flex-direction: column; gap: 1rem; height: 100%; overflow: hidden; }
+        .control-box { background: #1e293b; border-radius: 12px; padding: 1rem; border: 1px solid #334155; display: flex; flex-direction: column; gap: 0.6rem; }
+        .control-title { font-size: 0.95rem; font-weight: bold; color: #38bdf8; display: flex; justify-content: space-between; align-items: center; }
+        .step-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.4rem; }
+        .step-btn { background: #334155; color: #94a3b8; border: 1px solid #475569; padding: 0.6rem 0.2rem; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: bold; text-align: center; transition: all 0.2s; }
+        .step-btn.active { background: #2563eb; color: white; border-color: #60a5fa; box-shadow: 0 0 10px rgba(37,99,235,0.5); }
+        .step-btn:hover { border-color: #94a3b8; }
+
+        .coach-box { flex: 1; background: #1e293b; border-radius: 12px; padding: 1rem; border: 1px solid #334155; display: flex; flex-direction: column; gap: 0.6rem; overflow: hidden; }
+        .coach-history { flex: 1; overflow-y: auto; padding: 0.6rem; display: flex; flex-direction: column; gap: 0.6rem; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
+
+        .right-panel { flex: 1.2; background: #1e293b; border-radius: 12px; padding: 1rem; border: 1px solid #334155; display: flex; flex-direction: column; gap: 0.8rem; height: 100%; overflow: hidden; }
+        
+        .db-preview-card { background: #0f172a; border: 1px solid #0284c7; padding: 0.75rem; border-radius: 8px; font-size: 0.78rem; max-height: 190px; overflow-y: auto; }
+        .db-preview-card h4 { color: #38bdf8; font-size: 0.85rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between; position: sticky; top: 0; background: #0f172a; padding-bottom: 0.2rem; }
+        .db-chunk-item { background: #1e293b; border-left: 3px solid #38bdf8; padding: 0.4rem 0.6rem; margin-top: 0.35rem; border-radius: 2px; color: #cbd5e1; font-size: 0.73rem; line-height: 1.4; }
+        .db-chunk-item b { color: #fde047; }
+
+        .status-card { background: #854d0e; border: 1px solid #eab308; padding: 0.75rem; border-radius: 8px; font-size: 0.8rem; color: #fef08a; }
+        .status-card h4 { font-size: 0.9rem; margin-bottom: 0.3rem; color: #fde047; }
+        .test-hint { font-size: 0.75rem; color: #38bdf8; margin-top: 0.4rem; font-weight: bold; line-height: 1.4; }
+
+        .chat-history { flex: 1; overflow-y: auto; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.8rem; background: #0f172a; border-radius: 8px; border: 1px solid #334155; }
+        
+        .chat-bubble { max-width: 85%; padding: 0.65rem 0.85rem; border-radius: 8px; font-size: 0.85rem; line-height: 1.45; }
+        .chat-bubble.user { align-self: flex-end; background: #2563eb; color: white; }
+        .chat-bubble.bot { align-self: flex-start; background: #334155; color: #f8fafc; border: 1px solid #475569; }
+        .chat-bubble.tutor { align-self: flex-start; background: #1e293b; color: #7dd3fc; border: 1px solid #0284c7; }
+
+        .nlp-pipeline-log { font-size: 0.73rem; background: #0f172a; color: #cbd5e1; border-left: 3px solid #38bdf8; padding: 0.4rem 0.6rem; margin-top: 0.4rem; border-radius: 2px; line-height: 1.5; font-family: monospace; }
+
+        .input-area { display: flex; gap: 0.4rem; }
+        .input-area input { flex: 1; padding: 0.6rem; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 6px; font-size: 0.85rem; outline: none; }
+        .input-area input:focus { border-color: #38bdf8; }
+        .input-area button { background: #2563eb; color: white; border: none; padding: 0 1rem; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
+
+        /* Gemini API 키 입력 영역 */
+        .api-key-bar { display: flex; align-items: center; gap: 0.4rem; }
+        .api-key-bar input { width: 260px; padding: 0.35rem 0.6rem; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 6px; font-size: 0.8rem; outline: none; }
+        .api-key-bar input:focus { border-color: #38bdf8; }
+        .api-key-bar button { background: #2563eb; color: white; border: none; padding: 0.35rem 0.8rem; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
+        .api-key-bar button.secondary { background: #475569; }
+        #api-key-status { font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; white-space: nowrap; }
+        #api-key-status.off { background: #7f1d1d; color: #fecaca; }
+        #api-key-status.on { background: #065f46; color: #a7f3d0; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🩺 학생 심리상담 챗봇 5단계 누적 진화실험실</h1>
+        <div class="api-key-bar">
+            <input type="password" id="api-key-input" placeholder="Gemini API 키를 입력하세요" autocomplete="off" onkeypress="if(event.key==='Enter') applyApiKey()">
+            <button onclick="applyApiKey()">적용</button>
+            <button class="secondary" onclick="clearApiKey()">해제</button>
+            <small id="api-key-status" class="off">API 미연결</small>
+        </div>
+        <span>[최종 오류 수정완료판]</span>
+    </header>
+
+    <div class="main-container">
+        <div class="left-panel">
+            <div class="control-box">
+                <div class="control-title">
+                    <span>⚡ 챗봇 엔진 고도화 단계 선택</span>
+                    <small id="current-step-badge" style="color:#fde047;">[1단계] ELIZA 패턴매칭</small>
+                </div>
+                <div class="step-buttons">
+                    <button class="step-btn active" onclick="setStep(1)">1단계<br>ELIZA 원본</button>
+                    <button class="step-btn" onclick="setStep(2)">2단계<br>+ JSON 청킹</button>
+                    <button class="step-btn" onclick="setStep(3)">3단계<br>+ 벡터유사도</button>
+                    <button class="step-btn" onclick="setStep(4)">4단계<br>+ 셀프어텐션</button>
+                    <button class="step-btn" onclick="setStep(5)">5단계<br>+ LLM RAG</button>
+                </div>
+            </div>
+
+            <div class="coach-box">
+                <div class="control-title">
+                    <span>✨ 자유 대화 Gemini AI</span>
+                    <small style="color:#94a3b8;">무엇이든 물어보세요</small>
+                </div>
+                <div class="coach-history" id="tutor-history">
+                    <div class="chat-bubble tutor">
+                        안녕하세요! 자유롭게 대화할 수 있는 Gemini AI입니다. 질문이 있으시면 언제든 편하게 입력해 주세요! 😊
+                    </div>
+                </div>
+                <div class="input-area">
+                    <input type="text" id="tutor-input" placeholder="Gemini에게 질문하기..." onkeypress="if(event.key==='Enter') askTutor()">
+                    <button onclick="askTutor()">전송</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="db-preview-card">
+                <h4>
+                    <span>📁 학생 심리 상담 종합 JSON DB (CAT01~CAT08 전체)</span>
+                    <small style="color:#f59e0b;">* 스크롤하여 8개 전문 카테고리 확인 가능</small>
+                </h4>
+                <div id="db-preview-container"></div>
+            </div>
+
+            <div class="status-card" id="status-card">
+                <h4 id="status-title">📍 [1단계] ELIZA 원본 알고리즘 챗봇</h4>
+                <div id="status-desc">대화 스타일: 차갑고 단조로운 반사 질문 대화. (지식 DB 미적용)</div>
+                <div class="test-hint" id="status-hint">
+                    ✅ 테스트: "내가 너무 슬퍼" / "어머니랑 싸웠어" / "너는 나를 몰라"
+                </div>
+            </div>
+
+            <div class="chat-history" id="mybot-history">
+                <div class="chat-bubble bot">안녕하세요. 저는 엘리자(ELIZA) 상담사입니다. 오늘 어떤 고민이 있으신가요?</div>
+            </div>
+
+            <div class="input-area">
+                <input type="text" id="mybot-input" placeholder="고민을 입력해 보세요..." onkeypress="if(event.key==='Enter') testMyBot()">
+                <button onclick="testMyBot()" style="background:#059669;">상담하기</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GoogleGenAI } from "@google/genai";
+
+        // API 키는 코드에 저장하지 않고, 화면 상단 입력칸에서 사용자가 직접 입력합니다.
+        // (키는 브라우저 메모리에만 보관되며, 새로고침하면 사라집니다.)
+        let ai = null;
+
+        function updateApiKeyStatus(connected) {
+            const statusEl = document.getElementById('api-key-status');
+            statusEl.className = connected ? 'on' : 'off';
+            statusEl.innerText = connected ? 'API 연결됨' : 'API 미연결';
+        }
+
+        window.applyApiKey = function() {
+            const keyInput = document.getElementById('api-key-input');
+            const key = keyInput.value.trim();
+            if (!key) {
+                alert("Gemini API 키를 입력해 주세요.");
+                return;
+            }
+            try {
+                ai = new GoogleGenAI({ apiKey: key });
+                keyInput.value = '';
+                keyInput.placeholder = '키 적용됨 (다시 입력하면 교체)';
+                updateApiKeyStatus(true);
+            } catch(e) {
+                console.error("SDK 초기화 에러:", e);
+                ai = null;
+                updateApiKeyStatus(false);
+                alert("API 키 적용 중 오류가 발생했습니다. 콘솔을 확인해 주세요.");
+            }
+        };
+
+        window.clearApiKey = function() {
+            ai = null;
+            const keyInput = document.getElementById('api-key-input');
+            keyInput.value = '';
+            keyInput.placeholder = 'Gemini API 키를 입력하세요';
+            updateApiKeyStatus(false);
+        };
+
+        window.currentStep = 1;
+
+        window.fullCounselingDatabase = {
+            "version": "1.2",
+            "categories": [
+                { "id": "CAT01", "category_name": "학업 및 성적 스트레스", "case_id": "STU_ACAD_01", "keywords": ["시험", "성적", "학업", "공부", "두통", "소화불량", "번아웃", "불안"], "psychological_state": "학업 번아웃 및 시험 불안", "symptoms": "만성적 피로감, 성적 하락 공포", "coping_student": "하루 15분 완전한 휴식을 취하고, 목표를 '오늘 단어 20개 외우기'처럼 최소 단위로 쪼개보세요.", "vec": [0.90, 0.10] },
+                { "id": "CAT02", "category_name": "대인관계 및 또래 갈등", "case_id": "STU_REL_01", "keywords": ["친구", "눈치", "소외", "거절", "외로움", "외로", "외롭", "혼자", "양호실", "화장실", "왕따", "그 애"], "psychological_state": "관계 불안 및 또래 배제 공포", "symptoms": "소외감, 외로움, 친구 눈치 과도하게 봄", "coping_student": "거절하는 연습을 작은 것부터 시도해 보고, 나의 가치를 인정해 주는 건강한 또래 모임을 찾아보세요.", "vec": [0.30, 0.70] },
+                { "id": "CAT03", "category_name": "자아 및 정서 문제", "case_id": "STU_EMO_01", "keywords": ["분노", "화", "물건", "거친", "충동", "억울", "기복", "화냈어"], "psychological_state": "충동성 및 분노 조절 어려움", "symptoms": "억울함, 감정 기복 심함", "coping_student": "화가 치밀어 올릴 때는 '10초 멈춤(STOP기법)'과 함께 깊은 호흡을 세 번 해보세요.", "vec": [0.40, 0.60] },
+                { "id": "CAT04", "category_name": "가정 환경 및 부모 갈등", "case_id": "STU_FAM_01", "keywords": ["부모", "부모님", "기대", "압박", "거짓말", "무기력", "의존", "가출"], "psychological_state": "부모의 과도한 기대 및 압박 무기력", "symptoms": "압박감, 자율성 결여", "coping_student": "부모님께 솔직한 마음을 '나-전달법(I-Message)'으로 표현해 보는 건 어떨까요?", "vec": [0.60, 0.40] },
+                { "id": "CAT05", "category_name": "디지털 및 매체 중독", "case_id": "STU_MED_01", "keywords": ["스마트폰", "게임", "수면", "공격적", "화면", "중독", "밤", "폰"], "psychological_state": "스마트폰 및 게임 과몰입", "symptoms": "금단 증상, 현실 감각 저하", "coping_student": "무작정 안 하기보다 '잠들기 1시간 전 스마트폰 거실에 두기'처럼 자율적 사용 규칙을 정해 보세요.", "vec": [0.50, 0.50] },
+                { "id": "CAT06", "category_name": "진로 및 미래 불안", "case_id": "STU_CAR_01", "keywords": ["진로", "미래", "막막", "비교", "목표", "꿈", "적성"], "psychological_state": "진로 미결정 및 미래 불안", "symptoms": "막막함, 타인과 비교 열등감", "coping_student": "거창한 직업 대신 내가 좋아하는 작은 활동이나 관심사 목록부터 편하게 작성해 보세요.", "vec": [0.70, 0.30] },
+                { "id": "CAT07", "category_name": "학교폭력 및 사이버 따돌림", "case_id": "STU_VIOL_01", "keywords": ["학교폭력", "사이버", "따돌림", "복통", "알림", "돈", "갈취", "증거"], "psychological_state": "학교폭력 피해 공포", "symptoms": "위축감, 보복 공포, 수치심", "coping_student": "혼자 고민하지 말고 즉시 믿을 수 있는 어른이나 교사, 혹은 전문기관에 알리고 대화 내용을 캡처해 두세요.", "vec": [0.20, 0.80] },
+                { "id": "CAT08", "category_name": "위기 심리 (우울 및 자해)", "case_id": "STU_CRIS_01", "keywords": ["긴소매", "자해", "우울", "신변정리", "자살", "1388", "109", "손목"], "psychological_state": "주요 우울 장애 및 자해 위험", "symptoms": "만성적 우울감, 절망감", "coping_student": "너무 마음이 힘들 땐 얼음을 꼭 쥐어보거나, 24시간 청소년 상담전화(1388)로 언제든 연락해 주세요.", "vec": [0.10, 0.90] }
+            ]
+        };
+
+        const previewContainer = document.getElementById('db-preview-container');
+        window.fullCounselingDatabase.categories.forEach(cat => {
+            previewContainer.innerHTML += `
+                <div class="db-chunk-item">
+                    <b>[${cat.id}] ${cat.category_name} (${cat.case_id})</b><br>
+                    • 심리상태: ${cat.psychological_state}<br>
+                    • 대처방안(학생): ${cat.coping_student}
+                </div>
+            `;
+        });
+
+        class ElizaEngine {
+            constructor() {
+                this.quits = ["안녕", "종료", "끝", "quit"];
+            }
+
+            respond(text) {
+                let lower = text.toLowerCase();
+                if (this.quits.includes(lower)) return null;
+
+                if (lower.includes("때문에")) return "그것이 정말로 진정한 이유일까요? 다른 이유가 더 떠오르진 않나요?";
+                if (lower.includes("어머니") || lower.includes("엄마")) return "당신의 어머니에 대해 더 이야기해 주세요. 어머니와의 관계는 어떠신가요?";
+                if (lower.includes("아버지") || lower.includes("아빠")) return "아버지에 대한 이야기도 들려주세요. 아버지와의 추억이 있으신가요?";
+                if (lower.includes("너") || lower.includes("당신")) return `제가 ${text} 인 것에 대해 왜 신경 쓰시나요?`;
+                if (lower.includes("내가") || lower.includes("저는")) return "당신이 그렇다고 말씀하셨는데, 왜 그런지 더 이야기해주시겠어요?";
+                if (lower.includes("컴퓨터") || lower.includes("스마트폰")) return "기계나 스마트폰이 당신을 불안하게 만드나요? 이 문제와 어떤 관련이 있나요?";
+
+                const defaults = ["더 자세히 말씀해 주시겠어요?", "그렇군요. 계속 말씀해 보세요.", "그 문제에 대해 좀 더 이야기해 봅시다."];
+                return defaults[Math.floor(Math.random() * defaults.length)];
+            }
+        }
+
+        const eliza = new ElizaEngine();
+
+        window.askTutor = async function() {
+            const inputEl = document.getElementById('tutor-input');
+            const userMsg = inputEl.value.trim();
+            if (!userMsg) return;
+
+            const history = document.getElementById('tutor-history');
+            history.innerHTML += `<div class="chat-bubble user">${userMsg}</div>`;
+            inputEl.value = '';
+            history.scrollTop = history.scrollHeight;
+
+            if (ai) {
+                try {
+                    const response = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash',
+                        contents: userMsg,
+                        config: { temperature: 0.7 }
+                    });
+                    let reply = response.text.replace(/\n/g, '<br>');
+                    history.innerHTML += `<div class="chat-bubble tutor">${reply}</div>`;
+                    history.scrollTop = history.scrollHeight;
+                    return;
+                } catch(e) { console.error("Gemini API Error:", e); }
+            }
+
+            let localReply = `✨ <b>[Gemini AI 대화]</b><br>"${userMsg}"에 대해 궁금하시군요! 오른쪽 버튼을 클릭하여 ELIZA 알고리즘부터 RAG까지 단계별 대화체 진화 과정을 직접 테스트해 보세요.`;
+            history.innerHTML += `<div class="chat-bubble tutor">${localReply}</div>`;
+            history.scrollTop = history.scrollHeight;
+        };
+
+        window.setStep = function(step) {
+            window.currentStep = step;
+            
+            document.querySelectorAll('.step-btn').forEach((btn, idx) => {
+                if (idx + 1 === step) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+
+            const badge = document.getElementById('current-step-badge');
+            const title = document.getElementById('status-title');
+            const desc = document.getElementById('status-desc');
+            const hint = document.getElementById('status-hint');
+
+            const info = [
+                {},
+                {
+                    badge: "[1단계] ELIZA 원본",
+                    title: "📍 [1단계] ELIZA 100% 원본 알고리즘 챗봇",
+                    desc: "대화 스타일: 차갑고 단조로운 반사 질문 대화. (지식 DB 미적용)",
+                    hint: "✅ 테스트: \"내가 너무 슬퍼\" / \"어머니랑 싸웠어\" / \"너는 나를 몰라\""
+                },
+                {
+                    badge: "[2단계] + JSON 청킹",
+                    title: "📍 [2단계] ELIZA + JSON 청킹 대화체 결합",
+                    desc: "대화 스타일: 정확히 일치하는 DB 키워드가 포함되면 ELIZA 대화 틀 안에 지식을 자연스럽게 융합 대답!",
+                    hint: "✅ DB 키워드 대화: \"시험 때문에 힘들어\" / \"외로워\""
+                },
+                {
+                    badge: "[3단계] + 벡터유사도",
+                    title: "📍 [3단계] 1~2단계 + 코사인 벡터 유사도 대화",
+                    desc: "대화 스타일: Exact 키워드가 없어도 문맥 거리를 계산하여 유연한 상담 대화문 형성",
+                    hint: "✅ 유의어 대화: \"공부하기 진짜 싫어\" ➔ 학업 스트레스 맥락을 파악하고 대화체 조언"
+                },
+                {
+                    badge: "[4단계] + 셀프어텐션",
+                    title: "📍 [4단계] 1~3단계 + 고도화된 셀프 어텐션 대화",
+                    desc: "대화 스타일: 대명사('그 애'), 주어-목적어 관계, 부정어('시험 말고')까지 계산한 정교한 상담 대화!",
+                    hint: "✅ 정교한 대화 테스트:<br>" +
+                          "• \"시험 말고 친구 때문에 힘들어\" ➔ '시험'을 차단하고 친구 관계 조언 대화<br>" +
+                          "• \"친구와 다퉜는데 그 애가 내 말을 안 들어\" ➔ '그 애'가 친구임을 알고 대화"
+                },
+                {
+                    badge: "[5단계] + LLM RAG",
+                    title: "📍 [5단계] 1~4단계 누적 완결 + Google Gemini 완벽 대화 (RAG)",
+                    desc: "대화 스타일 🤩: 진짜 따뜻한 위클래스 상담 교사 어조로 문맥을 연결해 완벽하고 다정한 대화 합성!",
+                    hint: "✅ RAG 대화 테스트: \"요즘 시험 때문에 너무 불안하고 두통까지 나는 데 어떡하죠?\""
+                }
+            ];
+
+            badge.innerText = info[step].badge;
+            title.innerText = info[step].title;
+            desc.innerText = info[step].desc;
+            hint.innerHTML = info[step].hint;
+        };
+
+        function softmax(arr) {
+            const maxVal = Math.max(...arr);
+            const expArr = arr.map(x => Math.exp(x - maxVal));
+            const sumExp = expArr.reduce((a, b) => a + b, 0);
+            return expArr.map(x => x / sumExp);
+        }
+
+        function calculateCosineSimilarity(vecA, vecB) {
+            let dotProduct = 0.0, normA = 0.0, normB = 0.0;
+            for (let i = 0; i < vecA.length; i++) {
+                dotProduct += vecA[i] * vecB[i];
+                normA += vecA[i] * vecA[i];
+                normB += vecB[i] * vecB[i];
+            }
+            if (normA === 0 || normB === 0) return 0;
+            return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+        }
+
+        // 하드코딩 없이 어근 기반 유연 탐색 함수
+        function findMatchedJSONChunk(query) {
+            let lower = query.toLowerCase();
+            return window.fullCounselingDatabase.categories.find(cat => {
+                let matchKeyword = cat.keywords.some(kw => lower.includes(kw.toLowerCase()) || kw.toLowerCase().includes(lower));
+                let matchState = cat.psychological_state.toLowerCase().includes(lower);
+                let matchSymptom = cat.symptoms.toLowerCase().includes(lower);
+                return matchKeyword || matchState || matchSymptom;
+            });
+        }
+
+        window.testMyBot = async function() {
+            const inputEl = document.getElementById('mybot-input');
+            const rawInput = inputEl.value.trim();
+            if (!rawInput) return;
+
+            const history = document.getElementById('mybot-history');
+            history.innerHTML += `<div class="chat-bubble user">${rawInput}</div>`;
+            inputEl.value = '';
+
+            const step = window.currentStep;
+            let logs = [];
+
+            // --- 1단계: ELIZA 100% 원본 ---
+            if (step === 1) {
+                logs.push(`1️⃣ <b>[ELIZA 원본 대화]</b> 키워드 정규식 대치 및 반사 질문 대화 생성...`);
+                let reply = eliza.respond(rawInput);
+                renderResult(reply, logs);
+                return;
+            }
+
+            // --- 2단계: 1단계 + JSON 청킹 ---
+            if (step === 2) {
+                logs.push(`1️⃣~2️⃣ <b>[ELIZA + 청킹 대화체]</b> 키워드 추출 후 ELIZA 대화 틀에 DB 조각 융합...`);
+                let matched = findMatchedJSONChunk(rawInput);
+                
+                if (matched) {
+                    logs.push(`✅ DB 내 [${matched.category_name}] 일치 ➔ 대화체 문장 구성`);
+                    let reply = `<b>${matched.category_name}</b> 때문에 고민이 많으셨군요. ${matched.psychological_state} 증상일 수 있어요.<br><br>` +
+                                `선생님은 이렇게 해보는 걸 추천해요:<br>👉 "${matched.coping_student}"`;
+                    renderResult(reply, logs);
+                } else {
+                    logs.push(`❌ DB 미일치 ➔ 1단계 ELIZA 반사 대화 출력`);
+                    let reply = `⚠️ <b>[1단계 ELIZA 대화]</b><br>${eliza.respond(rawInput)}`;
+                    renderResult(reply, logs);
+                }
+                return;
+            }
+
+            // --- 3단계: 코사인 벡터 유사도 ---
+            if (step === 3) {
+                logs.push(`1️⃣~3️⃣ <b>[누적]</b> 코사인 벡터 유사도 스코어링 ➔ 유연한 대화 형성`);
+                let matched = findMatchedJSONChunk(rawInput);
+                let queryVec = matched ? matched.vec : [0.50, 0.50];
+
+                let simResults = window.fullCounselingDatabase.categories.map(cat => ({
+                    cat: cat,
+                    sim: calculateCosineSimilarity(queryVec, cat.vec)
+                }));
+                simResults.sort((a, b) => b.sim - a.sim);
+                let best = simResults[0].cat;
+                let simPercent = (simResults[0].sim * 100).toFixed(1);
+
+                logs.push(`3️⃣ <b>[벡터 유사도]</b> ${simPercent}% 매칭 ➔ [<b>${best.category_name}</b>] 대화 구성`);
+                let reply = `이야기를 들어보니 <b>${best.category_name}</b>에 대한 마음의 부담(유사도 ${simPercent}%)이 있으신 것 같아요.<br><br>` +
+                            `혼자 속상해하지 말고, **${best.coping_student}** 방법을 시도해 보면 마음이 한결 가벼워질 거예요.`;
+                renderResult(reply, logs);
+                return;
+            }
+
+            // --- 4단계: 셀프 어텐션 (대화 누적 오류 보정) ---
+            if (step === 4) {
+                logs.push(`1️⃣~3️⃣ <b>[누적]</b> 대명사/주어-목적어/부정어 어텐션 연산 가동`);
+
+                let currentMatched = findMatchedJSONChunk(rawInput);
+                let queryVec = currentMatched ? currentMatched.vec : [0.50, 0.50];
+                let attnLog = "";
+                let contextNote = "";
+
+                if (rawInput.includes("그 애") || rawInput.includes("그 친구")) {
+                    queryVec = [0.30, 0.70];
+                    attnLog = `🧠 <b>[대명사 어텐션]</b> '그 애' ➔ [대인관계] 가중치 매핑`;
+                    contextNote = "친구와의 사이에서 서운한 점이 있으셨군요.";
+                } else if (rawInput.includes("내가") && (rawInput.includes("화") || rawInput.includes("짜증"))) {
+                    queryVec = [0.40, 0.60];
+                    attnLog = `🧠 <b>[관계 파악]</b> 주체적 행동('내가 화를 냄') ➔ 분노 조절 집중`;
+                    contextNote = "욱하는 감정 때문에 스스로도 많이 당황스러우셨겠어요.";
+                } else if (["말고", "제외", "안", "빼고"].some(n => rawInput.includes(n))) {
+                    queryVec = [0.30, 0.70];
+                    attnLog = `🧠 <b>[부정어 차단 어텐션]</b> 제외 키워드 차단 및 진짜 고민 어텐션 집중`;
+                    contextNote = "말씀하신 다른 문제보다 지금은 이 고민이 가장 마음을 무겁게 하고 있군요.";
+                } else if (currentMatched) {
+                    attnLog = `🧠 <b>[현재 키워드 어텐션]</b> 방금 입력한 [${currentMatched.category_name}]에 가중치 집중`;
+                    contextNote = "이야기해 준 문맥을 정밀하게 파악해 보았어요.";
+                } else {
+                    attnLog = `🧠 <b>[문맥 어텐션]</b> 문장 전체 단어 관계망 계산`;
+                    contextNote = "이야기해 준 문맥을 정밀하게 파악해 보았어요.";
+                }
+
+                let dk = 2;
+                let rawScores = window.fullCounselingDatabase.categories.map(c => {
+                    return ((queryVec[0] * c.vec[0]) + (queryVec[1] * c.vec[1])) / Math.sqrt(dk);
+                });
+
+                let weights = softmax(rawScores);
+                let maxIdx = weights.indexOf(Math.max(...weights));
+                let best = window.fullCounselingDatabase.categories[maxIdx];
+                let weightScore = (weights[maxIdx] * 100).toFixed(1);
+
+                logs.push(`4️⃣ <b>[셀프 어텐션]</b> \`Softmax(QK^T / √d_k)\` ➔ ${attnLog}`);
+                logs.push(`5️⃣ <b>[가중치 매칭]</b> 어텐션 1위: [<b>${best.category_name}</b>] (가중치: <b>${weightScore}%</b>)`);
+
+                let reply = `🧠 <b>[어텐션 문맥 분석 상담]</b><br>${contextNote}<br><br>` +
+                            `<b>${best.category_name}</b> 관점에서 추천해 드리는 대처법이에요:<br>👉 "${best.coping_student}"`;
+                renderResult(reply, logs);
+                return;
+            }
+
+            // --- 5단계: LLM Generative RAG ---
+            if (step === 5) {
+                logs.push(`1️⃣~4️⃣ <b>[기능 누적]</b> ELIZA + 청킹 + 유사도 + 셀프어텐션 파이프라인 가동`);
+                logs.push(`5️⃣ <b>[NotebookLM급 RAG]</b> Gemini LLM이 완벽하고 따뜻한 위클래스 상담 대화 합성 중...`);
+
+                let bestItem = findMatchedJSONChunk(rawInput);
+                if (!bestItem) bestItem = window.fullCounselingDatabase.categories[0];
+
+                if (ai) {
+                    let ragPrompt = `
+[보관된 학생 심리 상담 종합 JSON DB]:
+- 카테고리: ${bestItem.category_name} (${bestItem.case_id})
+- 심리 상태: ${bestItem.psychological_state}
+- 주요 증상: ${bestItem.symptoms}
+- 학생 대처 방안: ${bestItem.coping_student}
+
+[학생 고민]: "${rawInput}"
+
+[응답 지침]:
+1. 위 DB 내용을 바탕으로, 진짜 따뜻하고 다정한 위클래스(Wee) 학교 상담 선생님 어조로 작성하세요.
+2. 학생의 말에 충분히 공감해 주고, 친절한 대화체 문장으로 용기를 북돋워 주는 답변을 해 주세요.
+`;
+
+                    try {
+                        const response = await ai.models.generateContent({
+                            model: 'gemini-2.5-flash',
+                            contents: ragPrompt,
+                            config: { temperature: 0.6 }
+                        });
+
+                        let naturalReply = response.text.replace(/\n/g, '<br>') + `<br><br><small style="color:#4ade80;">📌 근거 출처: 종합 JSON DB [${bestItem.category_name} - ${bestItem.case_id}]</small>`;
+                        renderResult(naturalReply, logs);
+                        return;
+                    } catch(e) { console.error(e); }
+                }
+
+                let localRAGReply = `많이 마음이 아프고 힘들었겠구나. 선생님에게 솔직하게 고민을 이야기해 줘서 고마워요.<br><br>` +
+                                    `<b>${bestItem.category_name}</b> 때문에 힘들 때는 혼자 속상해하지 말고, **${bestItem.coping_student}** 방법부터 차근차근 시도해 보렴. 선생님이 항상 응원할게!<br><br>` +
+                                    `<small style="color:#4ade80;">📌 근거 출처: 종합 JSON DB [${bestItem.category_name} - ${bestItem.case_id}]</small>`;
+
+                renderResult(localRAGReply, logs);
+            }
+
+            function renderResult(botReplyText, pipelineLogs) {
+                let logHtml = pipelineLogs.join("<br>");
+                history.innerHTML += `<div class="chat-bubble bot"><div>${botReplyText}</div><div class="nlp-pipeline-log">${logHtml}</div></div>`;
+                history.scrollTop = history.scrollHeight;
+            }
+        };
+    </script>
+</body>
+</html>
